@@ -41,7 +41,7 @@ services:
     volumes:
       - es_data:/usr/share/elasticsearch/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/ || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://esearch:9200 || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 10
