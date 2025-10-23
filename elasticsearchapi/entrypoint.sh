@@ -34,7 +34,7 @@ echo "Running collectstatic..."
 python manage.py collectstatic --noinput
 
 echo "Running migrations..."
-python manage.py makemigrations --noinput
+#python manage.py makemigrations --noinput
 python manage.py migrate --noinput
 
 echo "Starting Gunicorn..."
