@@ -21,4 +21,4 @@ def index_book_after_save(sender, instance, **kwargs):
 
 @receiver(post_delete, sender=Book)
 def delete_book_after_delete(sender, instance, **kwargs):
-    delete_book(instance.id)
+    delete_book(instance.book_id)

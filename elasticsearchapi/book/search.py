@@ -93,30 +93,111 @@ def delete_book(book_id):
     except Exception as e:
         logger.exception(f"Failed to delete book id={book_id}: {e}")
 
-def search_books(query, size=10):
+# search.py
+
+def elastic_search_books(query, from_=0, size=10):
     es = get_es_client()
     try:
+        # Build the flexible search query
         response = es.search(
             index=INDEX_NAME,
             body={
                 "query": {
                     "bool": {
-                    "should": [
-                        {"prefix": {"title": query.lower()}},
-                        {"prefix": {"author": query.lower()}},
-                        {"prefix": {"description": query.lower()}},
-                    ]
-                }
-                    #for full text search use this
-                    # "multi_match": {
-                    #     "query": query,
-                    #     "fields": ["title", "author", "description"],
-                    # }
+                        "should": [
+                            # Fuzzy match (handles typos and near matches)
+                            {
+                                "multi_match": {
+                                    "query": query,
+                                    "fields": ["title", "author", "description"],
+                                    "fuzziness": "AUTO",
+                                    "boost": 3  # Give fuzzy match more importance
+                                }
+                            },
+                            # Wildcard match (substring search)
+                            {"wildcard": {"title": {"value": f"*{query.lower()}*", "boost": 2}}},
+                            {"wildcard": {"author": {"value": f"*{query.lower()}*", "boost": 2}}},
+                            {"wildcard": {"description": {"value": f"*{query.lower()}*", "boost": 1}}},
+                            # Prefix match (start-of-word search)
+                            {
+                                "multi_match": {
+                                    "query": query,
+                                    "fields": ["title", "author", "description"],
+                                    "type": "phrase_prefix",
+                                    "boost": 2
+                                }
+                            },
+                        ]
+                    }
                 },
-                "size": size,
-            },
+                "from": from_,
+                "size": size
+            }
         )
-        return [hit["_source"] for hit in response["hits"]["hits"]]
+
+        # Extract and sort results by score (descending)
+        # results = [
+        #     {
+        #         "_score": hit["_score"],
+        #         "book_id": hit["_source"]["book_id"],
+        #         "title": hit["_source"]["title"],
+        #         "author": hit["_source"]["author"],
+        #         "description": hit["_source"]["description"],
+        #     }
+        #     for hit in sorted(response["hits"]["hits"], key=lambda x: x["_score"], reverse=True)
+        # ]
+
+        # return results
+        return response
+
     except Exception as e:
         logger.exception(f"Search failed for query='{query}': {e}")
         return []
+
+def get_es_search(query, from_=0, size=10):
+    response = elastic_search_books(query, from_=from_, size=size)
+    results = [
+            {
+                "_score": hit["_score"],
+                "book_id": hit["_source"]["book_id"],
+                "title": hit["_source"]["title"],
+                "author": hit["_source"]["author"],
+                "description": hit["_source"]["description"],
+            }
+            for hit in sorted(response["hits"]["hits"], key=lambda x: x["_score"], reverse=True)
+        ]
+    return results
+
+def get_book_ids(query, from_=0, size=10):
+    response = elastic_search_books(query, from_=from_, size=size)
+    book_ids = [int(hit["_source"]["book_id"]) for hit in response["hits"]["hits"]]
+    return book_ids
+
+# Previous simpler search implementation (commented out)
+# def search_books(query, size=10):
+#     es = get_es_client()
+#     try:
+#         response = es.search(
+#             index=INDEX_NAME,
+#             body={
+#                 "query": {
+#                     "bool": {
+#                     "should": [
+#                         {"prefix": {"title": query.lower()}},
+#                         {"prefix": {"author": query.lower()}},
+#                         {"prefix": {"description": query.lower()}},
+#                     ]
+#                 }
+#                     #for full text search use this
+#                     # "multi_match": {
+#                     #     "query": query,
+#                     #     "fields": ["title", "author", "description"],
+#                     # }
+#                 },
+#                 "size": size,
+#             },
+#         )
+#         return [hit["_source"] for hit in response["hits"]["hits"]]
+#     except Exception as e:
+#         logger.exception(f"Search failed for query='{query}': {e}")
+#         return []
