@@ -45,30 +45,75 @@ def wait_for_es(timeout=120):
         time.sleep(1)
 
 def create_index():
-    # ensure ES is ready first
+    """Create Elasticsearch index with custom shard and replica settings."""
     wait_for_es()
     es = get_es_client()
+
     try:
         if not es.indices.exists(index=INDEX_NAME):
-            es.indices.create(
-                index=INDEX_NAME,
-                body={
-                    "mappings": {
-                        "properties": {
-                            "book_id": {"type": "text"},
-                            "title": {"type": "text"},
-                            "author": {"type": "text"},
-                            "description": {"type": "text"},
+            # Define settings and mappings
+            index_body = {
+                "settings": {
+                    "number_of_shards": 1,      # number of primary shards
+                    "number_of_replicas": 0,    # number of replicas for each primary
+                    "analysis": {
+                        "analyzer": {
+                            "custom_analyzer": {
+                                "type": "standard",
+                                "stopwords": "_english_"  # optional: text optimization
+                            }
                         }
                     }
                 },
-            )
-            logger.info(f"Created index {INDEX_NAME}")
+                "mappings": {
+                    "properties": {
+                        "book_id": {"type": "keyword"},  # keyword for exact match
+                        "title": {
+                            "type": "text",
+                            "analyzer": "custom_analyzer"
+                        },
+                        "author": {"type": "text"},
+                        "description": {"type": "text"}
+                    }
+                }
+            }
+
+            # Create index with defined settings
+            es.indices.create(index=INDEX_NAME, body=index_body)
+            logger.info(f"Created index '{INDEX_NAME}' with 3 shards & 1 replica")
         else:
-            logger.info(f"Index {INDEX_NAME} already exists")
+            logger.info(f"Index '{INDEX_NAME}' already exists")
+
     except Exception as e:
-        logger.exception(f"Failed to create index {INDEX_NAME}: {e}")
+        logger.exception(f"Failed to create index '{INDEX_NAME}': {e}")
         raise
+
+
+# def create_index():
+#     # ensure ES is ready first
+#     wait_for_es()
+#     es = get_es_client()
+#     try:
+#         if not es.indices.exists(index=INDEX_NAME):
+#             es.indices.create(
+#                 index=INDEX_NAME,
+#                 body={
+#                     "mappings": {
+#                         "properties": {
+#                             "book_id": {"type": "text"},
+#                             "title": {"type": "text"},
+#                             "author": {"type": "text"},
+#                             "description": {"type": "text"},
+#                         }
+#                     }
+#                 },
+#             )
+#             logger.info(f"Created index {INDEX_NAME}")
+#         else:
+#             logger.info(f"Index {INDEX_NAME} already exists")
+#     except Exception as e:
+#         logger.exception(f"Failed to create index {INDEX_NAME}: {e}")
+#         raise
 
 def index_book(book):
     es = get_es_client()
@@ -122,7 +167,7 @@ def elastic_search_books(query, from_=0, size=10):
                             {
                                 "multi_match": {
                                     "query": query,
-                                    "fields": ["title", "author", "description"],
+                                    "fields": ["title", "author", "description^3"], # Boost description prefix matches
                                     "type": "phrase_prefix",
                                     "boost": 2
                                 }
